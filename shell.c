@@ -7,44 +7,55 @@
 
 #define CMD_STR_SIZE 20
 
+struct StringList_ 
+{
+    char **data;
+    int ocupado;
+};
+typedef struct StringList_ Stringlist;
 
-void parse(char * str, char ***mds)
+Stringlist create_str_list(int size)
+{
+    Stringlist strlist;
+
+    strlist.data = (char **) malloc(sizeof(char*) * size);
+    strlist.ocupado = 0;
+
+    return strlist;
+}
+
+void parse(char * str, Stringlist *strlist, char delim)
 {
     int len = strlen(str); //original string length
-    int cmdnum = 0;   //matrix index
-    int cmdstr_i = 0; //position in word parse
-    int newword = 0;  //new word indicator
+    int list_i = 0;   //matrix index
+    int str_i = 0;    //position in string parse
+    int new_elem = 0;  //new word indicator
 
-    char *cmdstr = (char*) malloc(CMD_STR_SIZE * sizeof(char));
+    char *varstr = (char*) malloc(CMD_STR_SIZE * sizeof(char));
 
     //printf("original string %s", str);
 
-    //mds[cmdnum][cmdstr] = str[i];
     for(int i = 0; i < len; i++)
     {
-        if(str[i] == ';')
-        {
-            break;
-        }
         //meets the end of a word 
-        else if(str[i] == ' ' || str[i] == '\n')
+        if(str[i] == delim || str[i] == '\n')
         {
             //printf("%c ", str[i]);
             //is it really a word?
-            if(newword)
+            if(new_elem)
             {
-                cmdstr_i++;
-                cmdstr[cmdstr_i] = '\0';
+                str_i++;
+                varstr[str_i] = '\0';
 
-                (*mds)[cmdnum] = strdup(cmdstr);
+                (*strlist).data[list_i] = strdup(varstr);
                 //printf("%s\n", cmdstr);
 
-                free(cmdstr);
+                free(varstr);
 
-                newword = 0;
-                cmdstr_i = 0;
+                new_elem = 0;
+                str_i = 0;
 
-                cmdnum++;
+                list_i++;
             }
 
             if(str[i] == '\n') break;
@@ -53,20 +64,21 @@ void parse(char * str, char ***mds)
         //collecting characters
         else
         {
-            if(!newword) //start of a new word?
+            if(!new_elem) //start of a new word?
             {
-                cmdstr = (char*) malloc(CMD_STR_SIZE * sizeof(char));
-                newword = 1;   //new word
+                varstr = (char*) malloc(CMD_STR_SIZE * sizeof(char));
+                new_elem = 1;   //new word
             }
 
-            cmdstr[cmdstr_i] = str[i];
+            varstr[str_i] = str[i];
             //printf("%c ", cmdstr[cmdstr_i]);
-            cmdstr_i++;
+            str_i++;
         }
     }
 
     //the array must be null terminated
-    (*mds)[cmdnum+1] = NULL;
+    (*strlist).ocupado = list_i+1;
+    (*strlist).data[list_i+1] = NULL;
 }
 
 void print_matrix(char **mstr, int len)
@@ -86,31 +98,49 @@ int loop()
     {
         printf("prompt> ");
 
+        Stringlist strlist = create_str_list(30);
+
         char path_name[100] = "/bin/";
-        char **args = (char **) malloc(sizeof(char*) *30);
         char *str = (char*) malloc(512 * sizeof(char));
 
         getline(&str, &len, stdin);
-        printf("%s\n", str);
 
+        printf("%s\n", str);
         if(!strcmp(str, "exit\n")){
             return 0;
         }
 
-        parse(str, &args);
-        strcat(path_name, args[0]);
-        //printf("all clear\n");
-        child_pid = fork();
+        parse(str, &strlist, ';');
 
-        if(child_pid == 0){
-            //printf("I am a child\n");
-            execv(path_name, args);
-            exit(0);
+        pid_t parent_pid = getpid();
+        int cmd_num = 0;
+        for(int i = 0; i < strlist.ocupado; i++)
+        {
+            fork();
+
+            if(getpid() != parent_pid)
+            {
+                cmd_num = i;
+                break; 
+            }
+        }
+        printf("i num %d\n", cmd_num);
+        if(getpid() != parent_pid)
+        {
+            Stringlist cmdlist = create_str_list(30);
+            parse(strlist.data[cmd_num], &cmdlist, ' ');
+
+            //printf("all clear\n");
+
+            strcat(path_name, cmdlist.data[0]);
+            execv(path_name, cmdlist.data);
         }
 
         else {
             wait(NULL);
         }
+
+        printf("finished\n");
     }
     return 0;
 }
